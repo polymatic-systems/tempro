@@ -1,0 +1,194 @@
+#!/bin/sh
+
+# shellcheck source=/dev/null
+
+set -ae
+
+if [ "$1" = "help" ] || [ -z "$1" ] || [ -z "$2" ]; then
+  echo "
+  tempro - template process
+
+Usage: tempro env_file command_with_args...
+
+  env_file - path to a file containing environment variable definitions, such as:
+
+    export VAR_ONE=one
+    export VAR_TWO=two
+    export VAR_THREE=three
+  
+  command_with_args - the command and args to run, such as:
+              
+    helm upgrade metrics-server stable/metrics-server --version 2.11.4 \\
+      --install --namespace kube-system --values metrics-server/values.yml
+
+Options:
+
+  the following environment variables can be set to change tempro
+
+  TEMPRO_DEFAULT_ENV:       set to the path of a file to source before the env_file is sourced. defaults to 'default.env'
+  TEMPRO_FUNCTIONS_ENV:     set to the path of a file to source after the env_file is sourced. defaults to 'functions.env'
+  TEMPRO_AUTO_APPROVE:      if set to 'yes', the prompt will not be displayed and the command will automatically be run    
+  TEMPRO_PRINT_K8S_CLUSTER: if set to 'yes', print the current kubernetes cluster in the INFO section
+
+Examples:
+
+  tempro path/to/production.env helm upgrade metrics-server stable/metrics-server --values metrics-server/\${CLOUD_PROVIDER}/values.yml --install 
+
+  tempro staging.env kubectl apply -f deploy.yml -f service.yml
+
+About:
+
+  Tempro will run a command for you, but before doing so, it will source several files and run environment variable
+  substitution on any files it finds in the arguments.
+
+  Only variables using the \${} format will be substituted. For exampe, \${SOME_VAR} will be substituted, but \$ANOTHER_VAR will not!
+
+  The files sourced (if they exist) are:
+
+  default.env - a file that should contain default environment variables
+  [env_file] - a file that should contain additional environment variables and ones to override any defaults if needed
+  functions.env - a file with shell functions to reformat environment variable values as needed
+
+  Tempro will also substitute any environment variables found in the arguments. However, for this to work, the 
+  dollar sign of the environment variable must be escaped so that it is not substitued by the shell before being passed
+  to tempro. For example: \${SOME_VAR}
+
+  The final templated command and files will be printed along with some info about the environment file sourced. 
+
+  A prompt will be displayed allowing the user to abort running the command in case they see an error in the resulting 
+  files or realize they have applied the wrong config.
+
+  In addition, tempro will generate base64 encoded variables of all environment variables that can be used for 
+  substitution in the files. For example, if SOME_VAR exists, the program will create SOME_VAR_BASE64.
+"
+  exit 0;
+fi
+
+if [ "$(command -v envsubst grep sed xargs rev cut mv cat | wc -l | xargs)" != "8" ]; then
+  echo "ERROR: there are missing packages. Please ensure the following programs are installed:
+envsubst grep sed xargs rev cut mv cat"
+  exit 1;
+fi
+
+mpre() { case $2 in "$1"*) true;; *) false;; esac; }
+
+TP_PATH="${1}"
+
+shift
+
+TEMPRO_DEFAULT_ENV="${TEMPRO_DEFAULT_ENV:-default.env}"
+TEMPRO_FUNCTIONS_ENV="${TEMPRO_FUNCTIONS_ENV:-functions.env}"
+
+[ -f "${TEMPRO_DEFAULT_ENV}" ] && . "${TEMPRO_DEFAULT_ENV}"
+. "${TP_PATH}"
+[ -f "${TEMPRO_FUNCTIONS_ENV}" ] && . "${TEMPRO_FUNCTIONS_ENV}"
+
+# generate _BASE64 versions of everything
+echo "creating base64 vars:";
+for var in $(env)
+do 
+  # remove obscure BASH_FUNC_funcname%% variables
+  # only alpha-numeric char: grep -E '[a-zA-Z0-9_]'
+  # non base64 encoded: grep -v -E '=$'
+  # single line: grep '='
+  # || true because grep annoyingly returns non-zero on no match
+  var_name="$(printf '%s' "${var}" | grep -v '%%' | grep -E '[a-zA-Z0-9_]' | grep -v -E '=$' | grep '=' | sed 's/=.*//g' | grep -v "_BASE64")" || true;
+  printf '.';
+  if [ -n "$var_name" ]; then
+    export "${var_name}_BASE64=$(printf "%s" "$var" | sed 's/.*=//g' | tr -d '\n'  | base64)";
+  fi
+done;
+echo "";
+
+# template process the command
+
+for x in "$@"
+do
+  TP_CMD="${TP_CMD} $(printf '%s' "$x" | envsubst)"
+done
+
+# create temporary file
+
+TP_FILES=''
+for word in $TP_CMD; do
+  if mpre "-" "$word"; then
+    i=1;
+    j=$((${#word} + 1))
+    while [ $i -le $j ]; do
+      if [ "$(printf "%s" "$word" | cut -c "$i")" = '=' ]; then
+        value="$(printf "%s" "$word" | cut -d'=' -f2-)"
+        if [ -f "$value" ]; then
+          TP_FILES="${TP_FILES} $value"
+        fi
+      fi
+      i=$((i+1))
+    done
+  else
+    if [ -f "$word" ]; then
+      TP_FILES="${TP_FILES} $word"
+    fi
+  fi
+done
+
+backup_files () {
+  for path in $1; do
+    TP_VFILE=$(echo "$path" | rev | cut -d'/' -f1 | rev)
+    TP_VDIR=${path%"$TP_VFILE"}
+    TP_PRM="${TP_VDIR}${TP_VFILE}"
+    TP_TMP="${TP_VDIR}.${TP_VFILE}"
+    mv -f "${TP_PRM}" "${TP_TMP}"
+  done
+}
+
+restore_files () {
+  for path in $1; do
+    TP_VFILE=$(echo "$path" | rev | cut -d'/' -f1 | rev)
+    TP_VDIR=${path%"$TP_VFILE"}
+    TP_PRM="${TP_VDIR}${TP_VFILE}"
+    TP_TMP="${TP_VDIR}.${TP_VFILE}"
+    mv -f "${TP_TMP}" "${TP_PRM}"
+  done
+}
+
+backup_files "$TP_FILES"
+
+trap 'restore_files "${TP_FILES}"; echo "\ncommand aborted"; exit 0;' HUP INT QUIT ABRT TERM
+
+export DOLLAR='$'
+
+for path in $TP_FILES; do
+  TP_VFILE=$(echo "$path" | rev | cut -d'/' -f1 | rev)
+  TP_VDIR=${path%"$TP_VFILE"}
+  TP_PRM="${TP_VDIR}${TP_VFILE}"
+  TP_TMP="${TP_VDIR}.${TP_VFILE}"
+
+  # template process file -> replace $ w/ ${DOLLAR}, then substitute ${} variables into file
+  # shellcheck disable=SC2016
+  < "${TP_TMP}" sed 's/\${/dolllarsign{/g' | sed 's/\$/\${DOLLAR}/g' | sed 's/dolllarsign{/\${/g' | envsubst > "${TP_PRM}";
+
+  printf "\n%s\n\n" "--------- FILE: ${TP_PRM}"
+  cat "${TP_PRM}"
+done
+
+printf "\n\n--------- INFO: \n\n";
+
+if [ "$TEMPRO_PRINT_K8S_CLUSTER" = "yes" ]; then
+  printf "\ncurrent cluster: %s\n\n" "$(kubectl config current-context)";
+fi;
+
+printf "env file: %s
+
+command: %s\n\n" "${TP_PATH}" "${TP_CMD}"
+
+if [ "$TEMPRO_AUTO_APPROVE" != 'yes' ]; then
+  echo "Press enter to continue or ^C to abort"
+  read -r
+fi
+
+set +e
+
+eval "$TP_CMD"
+
+set -e
+
+restore_files "${TP_FILES}"
