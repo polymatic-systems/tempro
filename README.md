@@ -12,7 +12,7 @@ Important! Tempro only sources environment variables using the `${}` syntax. For
 Simply run the `install.sh` script:
 
 ```
-curl -o- https://raw.githubusercontent.com/polymatic-systems/tempro/latest/install.sh | bash
+curl -o- https://raw.githubusercontent.com/polymatic-systems/tempro/master/install.sh | bash
 ```
 
 Or, copy `src/tempro` to a /bin directory and make it executable. The file is POSIX compatible and should work as long as you have the required dependent commands.
