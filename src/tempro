@@ -10,7 +10,9 @@ if [ "$1" = "help" ] || [ -z "$1" ] || [ -z "$2" ]; then
 
 Usage: tempro env_file command_with_args...
 
-  env_file - path to a file containing environment variable definitions, such as:
+  env_file - path to a file containing environment variable definitions.
+             if an empty string is provided (such as ''), then no file is sourced.
+             an example environment variables definitions file might have something like:
 
     export VAR_ONE=one
     export VAR_TWO=two
@@ -80,7 +82,7 @@ TEMPRO_DEFAULT_ENV="${TEMPRO_DEFAULT_ENV:-default.env}"
 TEMPRO_FUNCTIONS_ENV="${TEMPRO_FUNCTIONS_ENV:-functions.env}"
 
 [ -f "${TEMPRO_DEFAULT_ENV}" ] && . "${TEMPRO_DEFAULT_ENV}"
-. "${TP_PATH}"
+[ "${TP_PATH}" != '' ] && . "${TP_PATH}"
 [ -f "${TEMPRO_FUNCTIONS_ENV}" ] && . "${TEMPRO_FUNCTIONS_ENV}"
 
 # generate _BASE64 versions of everything
