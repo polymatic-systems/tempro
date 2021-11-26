@@ -4,7 +4,7 @@
 
 set -ae
 
-if [ "$1" = "help" ] || [ -z "$1" ] || [ -z "$2" ]; then
+if [ "$1" = "help" ] || [ "$#" -lt "2" ]; then
   echo "
   tempro - template process
 
