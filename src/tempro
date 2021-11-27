@@ -61,7 +61,9 @@ About:
   files or realize they have applied the wrong config.
 
   In addition, tempro will generate base64 encoded variables of all environment variables that can be used for 
-  substitution in the files. For example, if SOME_VAR exists, the program will create SOME_VAR_BASE64.
+  substitution in the files. For example, if SOME_VAR exists, the program will create SOME_VAR_BASE64. Some types
+  of environment variables that will be filtered from base64 encoding include ones with names that don't match the 
+  [a-zA-Z0-9_] pattern, that have multi-line values, and that have names already suffixed with _BASE64.
 "
   exit 0;
 fi
@@ -85,20 +87,19 @@ TEMPRO_FUNCTIONS_ENV="${TEMPRO_FUNCTIONS_ENV:-functions.env}"
 [ "${TP_PATH}" != '' ] && . "${TP_PATH}"
 [ -f "${TEMPRO_FUNCTIONS_ENV}" ] && . "${TEMPRO_FUNCTIONS_ENV}"
 
-# generate _BASE64 versions of everything
+TEMPRO_EXPORT_DELIMITER="export ";
+if [ $(command -v declare) ]; then
+  TEMPRO_EXPORT_DELIMITER="declare -x ";
+fi;
+
 echo "creating base64 vars:";
-for var in $(env)
-do 
-  # remove obscure BASH_FUNC_funcname%% variables
-  # only alpha-numeric char: grep -E '[a-zA-Z0-9_]'
-  # non base64 encoded: grep -v -E '=$'
-  # single line: grep '='
-  # || true because grep annoyingly returns non-zero on no match
-  var_name="$(printf '%s' "${var}" | grep -v '%%' | grep -E '[a-zA-Z0-9_]' | grep -v -E '=$' | grep '=' | sed 's/=.*//g' | grep -v "_BASE64")" || true;
+export -p | sed "s/${TEMPRO_EXPORT_DELIMITER}//g" | grep "=['\"].*['\"]" | while read line ; # reduces to single line vars
+do
   printf '.';
+  var_name="$(printf '%s' "${line}" | grep -E '=' | sed 's/=.*//g' | grep -E '[a-zA-Z0-9_]' | grep -v "_BASE64")" || true;
   if [ -n "$var_name" ]; then
-    export "${var_name}_BASE64=$(printf "%s" "$var" | sed 's/.*=//g' | tr -d '\n'  | base64)";
-  fi
+    export "${var_name}_BASE64=$(printf "%s" "$line" | sed 's/.*=//g' | tr -d '\n' | base64)";
+  fi;
 done;
 echo "";
 
