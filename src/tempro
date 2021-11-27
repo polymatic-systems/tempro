@@ -87,13 +87,8 @@ TEMPRO_FUNCTIONS_ENV="${TEMPRO_FUNCTIONS_ENV:-functions.env}"
 [ "${TP_PATH}" != '' ] && . "${TP_PATH}"
 [ -f "${TEMPRO_FUNCTIONS_ENV}" ] && . "${TEMPRO_FUNCTIONS_ENV}"
 
-TEMPRO_EXPORT_DELIMITER="export ";
-if [ $(command -v declare) ]; then
-  TEMPRO_EXPORT_DELIMITER="declare -x ";
-fi;
-
 echo "creating base64 vars:";
-export -p | sed "s/${TEMPRO_EXPORT_DELIMITER}//g" | grep "=['\"].*['\"]" | while read line ; # reduces to single line vars
+export -p | sed "s/^export //g" | sed "s/^declare -x //g" | grep "=['\"].*['\"]" | while read line ; # reduces to single line vars
 do
   printf '.';
   var_name="$(printf '%s' "${line}" | grep -E '=' | sed 's/=.*//g' | grep -E '[a-zA-Z0-9_]' | grep -v "_BASE64")" || true;
