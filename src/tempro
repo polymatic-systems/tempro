@@ -106,7 +106,10 @@ TEMPRO_FUNCTIONS_ENV="${TEMPRO_FUNCTIONS_ENV:-functions.env}"
 
 tempro_log "%s\n" "creating base64 vars:"
 
-export -p | sed "s/^export //g" | sed "s/^declare -x //g" | grep "=['\"].*['\"]" | while read -r line ; # reduces to single line vars
+PIFS="${IFS}";
+IFS='
+'
+for line in $(export -p | sed "s/^export //g" | sed "s/^declare -x //g" | grep "=['\"].*['\"]") # reduces to single line vars
 do
   tempro_log "%s" "."
   var_name="$(printf '%s' "${line}" | grep -E '=' | sed 's/=.*//g' | grep -E '[a-zA-Z0-9_]' | grep -v "_BASE64")" || true;
@@ -114,6 +117,7 @@ do
     export "${var_name}_BASE64=$(printf "%s" "$line" | sed 's/.*=//g' | tr -d '\n' | base64)";
   fi;
 done;
+IFS="${PIFS}";
 tempro_log "\n" "";
 
 # template process the command
