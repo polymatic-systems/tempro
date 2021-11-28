@@ -83,10 +83,10 @@ shift
 
 if [ "${TEMPRO_SILENT}" != "yes" ]; then
   tempro_log() {
-    printf "%s" "${1}"
+    printf "$@"
   }
   tempro_cat() {
-    cat "${1}"
+    cat "$@"
   }
 else
   tempro_log() {
@@ -104,23 +104,23 @@ TEMPRO_FUNCTIONS_ENV="${TEMPRO_FUNCTIONS_ENV:-functions.env}"
 [ "${TP_PATH}" != '' ] && . "${TP_PATH}"
 [ -f "${TEMPRO_FUNCTIONS_ENV}" ] && . "${TEMPRO_FUNCTIONS_ENV}"
 
-tempro_log "creating base64 vars:\n"
+tempro_log "%s\n" "creating base64 vars:"
 
 export -p | sed "s/^export //g" | sed "s/^declare -x //g" | grep "=['\"].*['\"]" | while read -r line ; # reduces to single line vars
 do
-  tempro_log '.'
+  tempro_log "%s" "."
   var_name="$(printf '%s' "${line}" | grep -E '=' | sed 's/=.*//g' | grep -E '[a-zA-Z0-9_]' | grep -v "_BASE64")" || true;
   if [ -n "$var_name" ]; then
     export "${var_name}_BASE64=$(printf "%s" "$line" | sed 's/.*=//g' | tr -d '\n' | base64)";
   fi;
 done;
-tempro_log "\n";
+tempro_log "\n" "";
 
 # template process the command
 
 for x in "$@"
 do
-  TP_CMD="${TP_CMD} $(printf '%s' "$x" | envsubst)"
+  TP_CMD="${TP_CMD}$(printf '%s' "$x" | envsubst) "
 done
 
 # create temporary file
@@ -186,7 +186,7 @@ for path in $TP_FILES; do
   tempro_cat "${TP_PRM}"
 done
 
-tempro_log "\n\n--------- INFO: \n\n";
+tempro_log "\n\n%s \n\n" "--------- INFO:";
 
 if [ "$TEMPRO_PRINT_K8S_CLUSTER" = "yes" ]; then
   printf "\ncurrent cluster: %s\n\n" "$(kubectl config current-context)";
