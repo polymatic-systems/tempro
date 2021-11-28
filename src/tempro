@@ -29,7 +29,8 @@ Options:
 
   TEMPRO_DEFAULT_ENV:       set to the path of a file to source before the env_file is sourced. defaults to 'default.env'
   TEMPRO_FUNCTIONS_ENV:     set to the path of a file to source after the env_file is sourced. defaults to 'functions.env'
-  TEMPRO_AUTO_APPROVE:      if set to 'yes', the prompt will not be displayed and the command will automatically be run    
+  TEMPRO_AUTO_APPROVE:      if set to 'yes', the prompt will not be displayed and the command will automatically be run
+  TEMPRO_SILENT:            if set to 'yes', suppress all output
   TEMPRO_PRINT_K8S_CLUSTER: if set to 'yes', print the current kubernetes cluster in the INFO section
 
 Examples:
@@ -80,6 +81,22 @@ TP_PATH="${1}"
 
 shift
 
+if [ "${TEMPRO_SILENT}" != "yes" ]; then
+  tempro_log() {
+    printf "%s" "${1}"
+  }
+  tempro_cat() {
+    cat "${1}"
+  }
+else
+  tempro_log() {
+    :
+  }
+  tempro_cat() {
+    :
+  }
+fi
+
 TEMPRO_DEFAULT_ENV="${TEMPRO_DEFAULT_ENV:-default.env}"
 TEMPRO_FUNCTIONS_ENV="${TEMPRO_FUNCTIONS_ENV:-functions.env}"
 
@@ -87,16 +104,17 @@ TEMPRO_FUNCTIONS_ENV="${TEMPRO_FUNCTIONS_ENV:-functions.env}"
 [ "${TP_PATH}" != '' ] && . "${TP_PATH}"
 [ -f "${TEMPRO_FUNCTIONS_ENV}" ] && . "${TEMPRO_FUNCTIONS_ENV}"
 
-echo "creating base64 vars:";
-export -p | sed "s/^export //g" | sed "s/^declare -x //g" | grep "=['\"].*['\"]" | while read line ; # reduces to single line vars
+tempro_log "creating base64 vars:\n"
+
+export -p | sed "s/^export //g" | sed "s/^declare -x //g" | grep "=['\"].*['\"]" | while read -r line ; # reduces to single line vars
 do
-  printf '.';
+  tempro_log '.'
   var_name="$(printf '%s' "${line}" | grep -E '=' | sed 's/=.*//g' | grep -E '[a-zA-Z0-9_]' | grep -v "_BASE64")" || true;
   if [ -n "$var_name" ]; then
     export "${var_name}_BASE64=$(printf "%s" "$line" | sed 's/.*=//g' | tr -d '\n' | base64)";
   fi;
 done;
-echo "";
+tempro_log "\n";
 
 # template process the command
 
@@ -164,17 +182,17 @@ for path in $TP_FILES; do
   # shellcheck disable=SC2016
   < "${TP_TMP}" sed 's/\${/dolllarsign{/g' | sed 's/\$/\${DOLLAR}/g' | sed 's/dolllarsign{/\${/g' | envsubst > "${TP_PRM}";
 
-  printf "\n%s\n\n" "--------- FILE: ${TP_PRM}"
-  cat "${TP_PRM}"
+  tempro_log "\n%s\n\n" "--------- FILE: ${TP_PRM}"
+  tempro_cat "${TP_PRM}"
 done
 
-printf "\n\n--------- INFO: \n\n";
+tempro_log "\n\n--------- INFO: \n\n";
 
 if [ "$TEMPRO_PRINT_K8S_CLUSTER" = "yes" ]; then
   printf "\ncurrent cluster: %s\n\n" "$(kubectl config current-context)";
 fi;
 
-printf "env file: %s
+tempro_log "env file: %s
 
 command: %s\n\n" "${TP_PATH}" "${TP_CMD}"
 
