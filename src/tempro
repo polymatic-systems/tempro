@@ -4,6 +4,10 @@
 
 set -ae
 
+if [ "$1" = "version" ]; then
+  echo "v1.2.4";
+fi;
+
 if [ "$1" = "help" ] || [ "$#" -lt "2" ]; then
   echo "
   tempro - template process
@@ -12,6 +16,8 @@ Usage: tempro env_file command_with_args...
 
   env_file - path to a file containing environment variable definitions.
              if an empty string is provided (such as ''), then no file is sourced.
+             if 'help', prints this info. 
+             if 'version', prints the version.
              an example environment variables definitions file might have something like:
 
     export VAR_ONE=one
