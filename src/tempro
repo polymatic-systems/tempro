@@ -5,7 +5,8 @@
 set -ae
 
 if [ "$1" = "version" ]; then
-  echo "v1.2.4";
+  echo "v1.2.5";
+  exit 0;
 fi;
 
 if [ "$1" = "help" ] || [ "$#" -lt "2" ]; then
